@@ -11,6 +11,8 @@ As I am trying to get strain to other case studies I will update this readme and
 # My takeaways from the project.
 If you want my main takeaways from this project as I know each one of us try to bring his or hers unique perspective.
 
+
+## If you have any un-knowenes - contact the data provider.
 I E-mailed Divvy with the E-mail supplied in their company's website about all the questions I had about the Dataset.
 did you know that "Docked_bike" and "Classic_bike" under Rideable_type - are the same ? 
 
