@@ -1,0 +1,527 @@
+---
+title: "Case1- Cyclistic"
+author: "Shahar Mazur"
+date: "2022-08-24"
+output: html_document
+---
+# To manipulate date functions
+# To create final visualization
+# To calculate distances on the map
+# To scale th ggplot
+
+knitr::opts_chunk$set(echo = TRUE)
+
+
+
+install.packages("lubridate") 
+install.packages("ggplot2") 
+install.packages("geosphere") 
+install.packages("scales") 
+install.packages("ggmap")
+
+
+```{r setup, include=FALSE}
+library(geosphere)
+library(lubridate)
+library(ggplot2)
+library(tidyverse)
+library(scales)
+library(ggmap)
+```
+
+# As Im working on my desktop, making sure the working dir.
+## Setting my data dir 
+```{r}
+getwd() 
+setwd("/Users/mazor/Documents/Case1-Cyclistic/Data") 
+list.files(path = "../Data")
+```
+# Reading in the entire Dataset - 1 Year's worth of traveling data
+```{r}
+tripdata_202107 <- read.csv("../data/202107-divvy-tripdata.csv")
+tripdata_202108 <- read.csv("../data/202108-divvy-tripdata.csv")
+tripdata_202109 <- read.csv("../data/202109-divvy-tripdata.csv")
+tripdata_202110 <- read.csv("../data/202110-divvy-tripdata.csv")
+tripdata_202111 <- read.csv("../data/202111-divvy-tripdata.csv")
+tripdata_202112 <- read.csv("../data/202112-divvy-tripdata.csv")
+tripdata_202201 <- read.csv("../data/202201-divvy-tripdata.csv")
+tripdata_202202 <- read.csv("../data/202202-divvy-tripdata.csv")
+tripdata_202203 <- read.csv("../data/202203-divvy-tripdata.csv")
+tripdata_202204 <- read.csv("../data/202204-divvy-tripdata.csv")
+tripdata_202205 <- read.csv("../data/202205-divvy-tripdata.csv")
+tripdata_202206 <- read.csv("../data/202206-divvy-tripdata.csv")
+```
+
+
+#.................#
+#Checking My Data #
+#.................#
+# Checking coulmn names are identical before joining all data
+```{r}
+colnames(tripdata_202107)
+colnames(tripdata_202108)
+colnames(tripdata_202109)
+colnames(tripdata_202110)
+colnames(tripdata_202111)
+colnames(tripdata_202112)   
+colnames(tripdata_202201)
+colnames(tripdata_202202)
+colnames(tripdata_202203)
+colnames(tripdata_202204)
+colnames(tripdata_202205)
+colnames(tripdata_202206)
+```
+
+
+
+
+# Joining all data to one dataset to make future processing more simple
+```{r}
+Total_Trip_Data <- bind_rows(tripdata_202107
+                             ,tripdata_202108
+                             ,tripdata_202109
+                             ,tripdata_202110
+                             ,tripdata_202111
+                             ,tripdata_202112
+                             ,tripdata_202201
+                             ,tripdata_202202
+                             ,tripdata_202203
+                             ,tripdata_202204
+                             ,tripdata_202205
+                             ,tripdata_202206)
+```
+
+
+```{r}
+print(unique(Total_Trip_Data$rideable_type)) 
+```
+### Consistent with 3 types of bikes - "docked_bike"   "classic_bike"  "electric_bike" - No Nulls
+```{r}
+print(unique(Total_Trip_Data$member_casual))          
+```
+### Consistent with 2 types of users - "casual" "member" - No Nulls
+```{r include=FALSE}
+print(unique(Total_Trip_Data$start_station_name))                                         
+print(unique(Total_Trip_Data$end_station_name))
+```
+### There are 22 more ending stations than starting stations
+```{r include=FALSE}
+print(unique(Total_Trip_Data$start_station_id))
+print(unique(Total_Trip_Data$end_station_id))
+```
+### There are 14 more ending stations ID's than starting ID
+
+### Data contain a lot of un-needed data, as charging stations, repair stations, mobile stations .
+```{r}
+print(mean(Total_Trip_Data$start_lat))
+print(mean(Total_Trip_Data$start_lng))
+print(mean(Total_Trip_Data$end_lat))     
+print(mean(Total_Trip_Data$end_lng))     
+```
+
+##### mean(Total_Trip_Data$end_lng came out as NA
+##### mean(Total_Trip_Data$end_lat came out as NA
+##### A quick check to see if there are NULLs in a numeric data frames
+##### It shows some of the bikes never arrived to an end station (theft, broke) either way the data will interfere with our results and should be removed.
+
+
+##### 774 bikes has not arrived to an end station by members.
+##### 3545 bikes has not arrived to an end station by casual users.
+##### Total of 4319 bikes has not arrived to an end station.
+
+
+
+
+# Organizing My Data
+
+
+```{r}
+Total_Trip_Data <- na.omit(Total_Trip_Data) 
+```
+##### removes all null cells that might interfere with calculations. - Removes 5,374 rows
+
+```{r include=FALSE}
+Total_Trip_Data <- rename(Total_Trip_Data
+                  ,start_time = "started_at"
+                  ,end_time = "ended_at")
+```
+
+### extract year, month, date, day of week .
+
+```{r}
+Total_Trip_Data <- Total_Trip_Data %>%
+  mutate(year = format(as.Date(start_time), "%Y")) %>% 
+  mutate(month = format(as.Date(start_time), "%B")) %>% 
+  mutate(date = format(as.Date(start_time), "%d")) %>% 
+  mutate(day_of_week = format(as.Date(start_time), "%A")) %>% 
+  mutate(ride_length = difftime(end_time, start_time))  
+
+Total_Trip_Data <- Total_Trip_Data %>%   
+  mutate(ride_length = as.numeric(ride_length))
+
+```
+### Creating back up
+```{r eval=FALSE, include=FALSE}
+Total_Trip_Data -> Total_Trip_Data_temp ## creating back up #1
+```
+
+# Adding a column to calculate each trip duration
+```{r}
+Total_Trip_Data <- mutate(Total_Trip_Data, tripduration = int_length(interval(ymd_hms(Total_Trip_Data$start_time), ymd_hms(Total_Trip_Data$end_time))))
+```
+
+# Calculating aerial distance of the trip.
+```{r}
+Total_Trip_Data$Ariel_distance <- distGeo(matrix(c(Total_Trip_Data$start_lng, Total_Trip_Data$start_lat), ncol = 2), matrix(c(Total_Trip_Data$end_lng, Total_Trip_Data$end_lat), ncol = 2))
+
+
+Total_Trip_Data <- Total_Trip_Data[!(Total_Trip_Data$Ariel_distance <= 0),]
+```
+# Cleaning rides that were picked up and returned to the same station. 
+#### Cleared 366,276 rows (this is a data collection issue)
+
+```{r}
+Total_Trip_Data <- Total_Trip_Data[!(Total_Trip_Data$Ariel_distance >=30000),] 
+```
+## Cleaning  unusual rides, over 30KM  (cleared 10 rows)
+
+```{r}
+Total_Trip_Data <- Total_Trip_Data[!(Total_Trip_Data$tripduration <= 0),] 
+```
+## Cleaning rows with issue as trip duration =<0 , cleared 484 rows
+
+
+# Creating Backup number 2
+```{r eval=FALSE, include=FALSE}
+Total_Trip_Data_temp2 <- Total_Trip_Data ## creating back up #2
+```
+
+
+## Analyzing
+##### This analize is going to be without assuming casual riders go to touristic spots, in the 2nd analysis wi will remove all casual riders ending stations that are located in a city touristic area so we can consider only local casual riders.
+
+```{r}
+Total_Trip_Data %>% 
+  group_by(rideable_type) %>% 
+  summarise(ride_count = length(ride_id), ride_percentage = (length(ride_id) / nrow(Total_Trip_Data)) * 100)
+```
+# what is "docked_bike" ?
+### Contacted Divvy , the answer was that Docked_bike are equal to Classic_bike.
+```{r}
+Total_Trip_Data['rideable_type'][Total_Trip_Data['rideable_type'] =="docked_bike"] <- "classic_bike"
+print(unique(Total_Trip_Data$rideable_type))
+```
+### Corrected to 2 types of bikes -  "classic_bike"  "electric_bike" - No Nulls
+
+
+```{r}
+Total_Trip_Data %>% 
+  group_by(member_casual) %>% 
+  summarise(ride_count = length(ride_id), ride_percentage = (length(ride_id) / nrow(Total_Trip_Data)) * 100)
+```
+
+
+```{r}
+Total_Trip_Data %>% 
+  group_by(member_casual) %>% 
+  summarise(longest_ride_MINUTES = max(tripduration/60),Average_ride_MINUTES = mean(tripduration/60),Shortest_ride_MINUTES = min(tripduration/60))
+```
+
+
+
+```{r}  
+Total_Trip_Data %>%
+ggplot(mapping = aes(x = member_casual, fill=member_casual)) +
+  geom_bar() +
+  labs( x="Casuals vs Members", y="Number Of Rides", title= "Distrebution between Members & Casual users - Tourists included.",alt = "User Type", caption = "**This dataset contain tourists**") +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287")) +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  geom_text(aes(label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = 12, colour = "Black")
+```
+## 42.4%
+## 57.6%
+
+
+
+## Sorting "day_of_week" by the days of the week 
+```{r}
+Total_Trip_Data$day_of_week <- factor(Total_Trip_Data$day_of_week, 
+                               levels = as.character(wday(c(2:7,1), label=TRUE, abbr=FALSE)))
+```
+
+## Sorting "month" by the months of the year
+```{r}
+Total_Trip_Data$month <- factor(Total_Trip_Data$month, 
+                                      levels = as.character(month(c(7:12,1:6), label=TRUE, abbr=FALSE)))
+```
+```{r}
+ggplot(Total_Trip_Data, aes(x=day_of_week,fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = comma)+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs( x="Day Of The Week", y="Number Of Rides", title= "Members & Casual users use by day of the week - With Tourists",alt = "User Type", caption = "**This dataset contain tourists**") +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287"))
+```
+```{r}
+ggplot(Total_Trip_Data, aes(x=month,fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = comma)+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287")) +
+  labs(x="July 2021 to June 2022", y="Number Of Rides", title= "Members & Casual users use by month.",caption = "**This dataset contain tourists**")
+```
+
+
+### Analyzing these 2 tablets shows us there are too many tourists in the dataset, and the should not be considered in the research.
+
+# Creating a backup for the cleaning process
+```{r}
+Total_Trip_Data -> Total_Trip_Data_temp2
+write.csv(Total_Trip_Data,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\Final_Dataset_with_tourists.csv", row.names = FALSE)
+```
+
+# Removing stations that are considered by the company as " for tourism"
+```{r}
+Total_Trip_Data_no_tourists <- Total_Trip_Data[!(Total_Trip_Data$end_station_name=="Streeter Dr & Grand Ave" 
+                                                  | Total_Trip_Data$end_station_name=="Ft Dearborn Dr & 31st St"
+                                                  | Total_Trip_Data$end_station_name=="South Shore Dr & 71st St"
+                                                  | Total_Trip_Data$end_station_name=="Museum of Science and Industry"
+                                                  | Total_Trip_Data$end_station_name=="Shore Dr & 55th St"
+                                                  | Total_Trip_Data$end_station_name=="Fort Dearborn Dr & 31st St"
+                                                  | Total_Trip_Data$end_station_name=="Burnham Harbor"
+                                                  | Total_Trip_Data$end_station_name=="Shedd Aquarium"
+                                                  | Total_Trip_Data$end_station_name=="Field Museum"
+                                                  | Total_Trip_Data$end_station_name=="Adler Planetarium"
+                                                  | Total_Trip_Data$end_station_name=="Lake Shore Dr & Monroe St"
+                                                  | Total_Trip_Data$end_station_name=="DuSable Harbor"
+                                                  | Total_Trip_Data$end_station_name=="Lake Park Ave & 53rd St"
+                                                 | Total_Trip_Data$end_station_name=="Lake Shore Dr & North Blvd"
+                                                 | Total_Trip_Data$end_station_name=="Clark St & Armitage Ave"
+                                                 | Total_Trip_Data$end_station_name=="Cannon Dr & Fullerton Ave"
+                                                 | Total_Trip_Data$end_station_name=="Lake Shore Dr & Belmont Ave"
+                                                 | Total_Trip_Data$end_station_name=="Montrose Harbor"
+                                                 | Total_Trip_Data$end_station_name=="Michigan Ave & Oak St"
+                                                 | Total_Trip_Data$end_station_name=="Marshfield Ave & Courtland St"
+                                                 | Total_Trip_Data$end_station_name=="Damen Ave & Courtland St"
+                                                 | Total_Trip_Data$end_station_name=="Milwaukee Ave & Wabansia St"
+                                                 | Total_Trip_Data$end_station_name=="Western Ave & Winnebago Ave"
+                                                 | Total_Trip_Data$end_station_name=="Albany Ave & Bloomingdale Ave"
+                                                 | Total_Trip_Data$end_station_name=="Theater on the Lake"
+                                                 | Total_Trip_Data$start_station_name=="Streeter Dr & Grand Ave" 
+                                                 | Total_Trip_Data$start_station_name=="Ft Dearborn Dr & 31st St"
+                                                 | Total_Trip_Data$start_station_name=="South Shore Dr & 71st St"
+                                                 | Total_Trip_Data$start_station_name=="Museum of Science and Industry"
+                                                 | Total_Trip_Data$start_station_name=="Shore Dr & 55th St"
+                                                 | Total_Trip_Data$start_station_name=="Fort Dearborn Dr & 31st St"
+                                                 | Total_Trip_Data$start_station_name=="Burnham Harbor"
+                                                 | Total_Trip_Data$start_station_name=="Shedd Aquarium"
+                                                 | Total_Trip_Data$start_station_name=="Field Museum"
+                                                 | Total_Trip_Data$start_station_name=="Adler Planetarium"
+                                                 | Total_Trip_Data$start_station_name=="Lake Shore Dr & Monroe St"
+                                                 | Total_Trip_Data$start_station_name=="DuSable Harbor"
+                                                 | Total_Trip_Data$start_station_name=="Lake Park Ave & 53rd St"
+                                                 | Total_Trip_Data$start_station_name=="Lake Shore Dr & North Blvd"
+                                                 | Total_Trip_Data$start_station_name=="Clark St & Armitage Ave"
+                                                 | Total_Trip_Data$start_station_name=="Cannon Dr & Fullerton Ave"
+                                                 | Total_Trip_Data$start_station_name=="Lake Shore Dr & Belmont Ave"
+                                                 | Total_Trip_Data$start_station_name=="Montrose Harbor"
+                                                 | Total_Trip_Data$start_station_name=="Michigan Ave & Oak St"
+                                                 | Total_Trip_Data$start_station_name=="Marshfield Ave & Courtland St"
+                                                 | Total_Trip_Data$start_station_name=="Damen Ave & Courtland St"
+                                                 | Total_Trip_Data$start_station_name=="Milwaukee Ave & Wabansia St"
+                                                 | Total_Trip_Data$start_station_name=="Western Ave & Winnebago Ave"
+                                                 | Total_Trip_Data$start_station_name=="Albany Ave & Bloomingdale Ave"
+                                                 | Total_Trip_Data$start_station_name=="Theater on the Lake"),]
+```
+### Removing these stations that are considered as "touristic" removed 569,940 rows, can assume there are more tourists that that a year. but personal information is needed to make sure.
+```{r}
+Total_Trip_Data_no_tourists <- Total_Trip_Data_no_tourists[!(Total_Trip_Data_no_tourists$Ariel_distance >=30000),] 
+Total_Trip_Data_no_tourists <- Total_Trip_Data_no_tourists[!(Total_Trip_Data_no_tourists$tripduration <= 0),]
+```
+
+
+#### This is the last version and change to the dataframe, I work on a laptop so to clear out memory space I will export my dataset into a CSV file, clear the workframe are from old datasets and re-load only what I need for graphic use.
+
+# Backup and reload section
+write.csv(Total_Trip_Data_no_tourists,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\Final_Dataset_Without_Tourists_bystation.csv", row.names = FALSE)
+Total_Trip_Data_no_tourists <- read.csv("../Data/Final_Dataset_Without_Tourists_bystation.csv") ## ## Don't forget to load libraries.
+
+```{r}
+Total_Trip_Data_no_tourists %>% 
+  group_by(member_casual) %>% 
+  summarise(ride_count = length(ride_id), ride_percentage = (length(ride_id) / nrow(Total_Trip_Data_no_tourists)) * 100)
+```
+
+# Significant change from earlier results 
+```{r}
+Total_Trip_Data_no_tourists %>% 
+  group_by(member_casual) %>% 
+  summarise(longest_ride_MINUTES = max(tripduration/60),Average_ride_MINUTES = mean(tripduration/60),Shortest_ride_MINUTES = min(tripduration/60))
+```
+
+
+# Starting to plot the data
+```{r}
+Total_Trip_Data_no_tourists %>%
+  ggplot(mapping = aes(x = member_casual, fill=member_casual)) +
+  geom_bar() +
+  labs( x="Casuals vs Members", y="Number Of Rides", title= "Distrebution between Members & Casual users - Without tourists.",alt = "User Type", caption = "**This dataset contain NO tourists**") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_y_continuous(labels = comma) +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287"))+
+  geom_text(aes(label = scales::percent((..count..)/sum(..count..))), stat = "count", vjust = 12, colour = "Black")
+```
+
+
+## 40.1%
+## 59.9%
+
+## Sorting "day_of_week" by the days of the week 
+```{r}
+Total_Trip_Data_no_tourists$day_of_week <- factor(Total_Trip_Data_no_tourists$day_of_week, 
+                                      levels = as.character(wday(c(2:7,1), label=TRUE, abbr=FALSE)))
+```
+
+## Sorting "month" by the months of the year
+```{r}
+Total_Trip_Data_no_tourists$month <- factor(Total_Trip_Data_no_tourists$month, 
+                                levels = as.character(month(c(7:12,1:6), label=TRUE, abbr=FALSE)))
+```
+
+```{r}
+ggplot(Total_Trip_Data_no_tourists, aes(x=rideable_type,fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = comma)+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287")) +
+  labs(x="Bike Type", y="Number Of Rides", title= "Members & Casual users use by type of bike.",caption = "**This dataset contain NO tourists**")
+
+ggplot(Total_Trip_Data_no_tourists, aes(x=day_of_week,fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = comma)+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs( x="Day Of The Week", y="Number Of Rides", title= "Members & Casual users use by day of the week - Without Tourists",alt = "User Type", caption = "**This dataset contain NO tourists**") +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287"))
+
+
+
+ggplot(Total_Trip_Data_no_tourists, aes(x=month,fill = member_casual)) +
+  geom_bar(position = "dodge") +
+  scale_y_continuous(labels = comma)+
+  theme(plot.title = element_text(hjust = 0.5)) +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287")) +
+  labs(x="July 2021 to June 2022", y="Number Of Rides", title= "Members & Casual users use by month.",caption = "**This dataset contain NO tourists**")
+```
+
+backup point
+Total_Trip_Data_temp3 <- Total_Trip_Data_no_tourists ## back up
+
+
+
+
+
+```{r}
+Total_Trip_Data_no_tourists$hour <-format(as.POSIXct(Total_Trip_Data_no_tourists$start_time), format = "%H")
+
+
+Total_Trip_Data_no_tourists %>%
+  ggplot(aes(x=hour, fill=member_casual)) +
+  geom_bar(position = "dodge") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x="Hour of the day", title="Cyclistic's bike demand per hour by day of the week") +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287")) +
+  facet_wrap(~ day_of_week)
+
+
+Examin_weekdays <- Total_Trip_Data_no_tourists[!((Total_Trip_Data_no_tourists$day_of_week =="Sunday") |(Total_Trip_Data_no_tourists$day_of_week =="Saturday")),]
+```
+## Needed to show weekend vs weekdays example
+```{r}
+Examin_weekdays %>%
+  ggplot(aes(x=hour, fill=member_casual)) +
+  geom_bar(position = "dodge") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x="Hour of the day", title="Cyclistic's bike demand per hour on the weekdays") +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287"))+
+  facet_wrap(~ day_of_week,nrow =2)
+
+
+Examin_weekend <- Total_Trip_Data_no_tourists[(Total_Trip_Data_no_tourists$day_of_week =="Sunday") |(Total_Trip_Data_no_tourists$day_of_week =="Saturday"),]
+
+Examin_weekend %>%
+  ggplot(aes(x=hour, fill=member_casual)) +
+  geom_bar(position = "dodge") +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  labs(x="Hour of the day", title="Cyclistic's bike demand per hour on the weekend") +
+  scale_fill_manual("legend", values = c("member" = "#62B2E0", "casual" = "#E06287"))+
+  facet_wrap(~ day_of_week)
+```
+# Exporting files to use in Power BI
+```{r}
+write.csv(Examin_weekend,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\examine_weekends.csv", row.names = FALSE)
+write.csv(Examin_weekdays,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\Examin_weekdays.csv", row.names = FALSE)
+```
+
+
+
+
+### Lets check the coordinates data of the rides.
+### Adding a new data frame only for the most popular routes >150 rides
+### as we are comparing we should first split betwenn members and casual users then look at the 150 most driven routes
+```{r}
+casual_riders_dt <- Total_Trip_Data_no_tourists %>% filter(member_casual == "casual")
+member_riders_dt <- Total_Trip_Data_no_tourists %>% filter(member_casual == "member")
+```
+### Exporting files to use in Power BI
+```{r}
+write.csv(casual_riders_dt,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\casual_riders_dt.csv", row.names = FALSE)
+write.csv(member_riders_dt,"C:\\Users\\mazor\\Documents\\Case1-Cyclistic\\Data\\member_riders_dt.csv", row.names = FALSE)
+```
+
+```{r}
+casual_riders <- casual_riders_dt %>% 
+  filter(start_lng != end_lng & start_lat != end_lat) %>%
+  group_by(start_lng, start_lat, end_lng, end_lat, member_casual, Ariel_distance,rideable_type) %>%
+  summarise(total_rides = n(),.groups="drop") %>%
+  filter(total_rides > 150)
+
+member_riders <- member_riders_dt %>% 
+  filter(start_lng != end_lng & start_lat != end_lat) %>%
+  group_by(start_lng, start_lat, end_lng, end_lat, member_casual, Ariel_distance,rideable_type) %>%
+  summarise(total_rides = n(),.groups="drop") %>%
+  filter(total_rides > 150)
+```
+
+
+# now lets create two different data frames depending on rider type (member_casual)
+
+```{r}
+chicago <- c(left = -87.700424, bottom = 41.74, right = -87.554855, top = 42.04)
+
+chicago_map <- get_stamenmap(bbox = chicago, zoom = 12, maptype = "terrain")
+
+total_ride_colors <- colorRampPalette(c("blue","green"))
+favorite <- total_ride_colors(200)
+```
+
+# Maps on casual riders
+```{r}
+ggmap(chicago_map,darken = c(0.1, "white")) +
+  geom_point(casual_riders, mapping = aes(x = start_lng, y = start_lat, color=total_rides), size = 2) +
+  coord_fixed(0.8) +
+  scale_colour_gradientn(colors = favorite)+
+  labs(title = "Most used routes by Casual riders",x=NULL,y=NULL)
+```
+
+# Map on member riders
+```{r}
+ggmap(chicago_map,darken = c(0.1, "white")) +
+  geom_point(member_riders, mapping = aes(x = start_lng, y = start_lat, color=total_rides), size = 2) +  
+  coord_fixed(0.8) +
+  scale_colour_gradientn(colors = favorite)+
+  labs(title = "Most used routes by Member riders",x=NULL,y=NULL)
+```
+
+
+
