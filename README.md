@@ -12,7 +12,8 @@ As I am trying to get strain to other case studies I will update this readme and
 If you want my main takeaways from this project as I know each one of us try to bring his or hers unique perspective.
 
 
-### If you have any un-knowenes - contact the data provider.
+### If you have any un-knowns - contact the data provider.
+
 I E-mailed Divvy with the E-mail supplied in their company's website about all the questions I had about the Dataset.
 did you know that "Docked_bike" and "Classic_bike" under Rideable_type - are the same ? 
 
@@ -31,6 +32,7 @@ It is an importand detail I would have liked to know.
 
 
 ### Focus on the targeted audiance.
+
 my third takeaway is also good for anyone who analyze businesses.
 in this case I removed all the data the is not interquartile range a function a happly learned on codecademy.com
 in short it take around 25% lower cases and 25% upper cases (uses per station \ per distance... ) and gives you the main uses in the center of the Gauss Bell
